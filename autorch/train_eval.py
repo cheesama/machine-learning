@@ -38,8 +38,9 @@ def tune_train_eval(loader, model, criterion, config, tuned, reporter):
 
     #choose model type(whether DataParallel or not)
     if 'multiGPU' in config.keys() and config['multiGPU'] == 'Y':
-        model = nn.DataParallel(model).cuda()
-    else:
+        model = nn.DataParallel(model)
+
+    if torch.cuda.is_available():
         model = model.cuda()
 
     #default optimizer -> adam
@@ -190,8 +191,8 @@ if __name__ == '__main__':
                     "training_iteration": int(config['epoch']),
                 },
                 "trial_resources": {
-                    "gpu": 2,
-                    "cpu": 4,
+                    "gpu": 0,
+                    "cpu": 1,
                 },
                 "run": "tune_train_eval",
                 "num_samples": 5,
