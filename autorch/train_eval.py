@@ -5,7 +5,7 @@ import torch.optim as optim
 import torch.optim.lr_scheduler as lr_scheduler
 
 import os, sys, time
-import configparser, multiprocessing
+import configparser, multiprocessing, ast
 import numpy as np
 
 import mlflow           #for logging experiment result
@@ -156,6 +156,15 @@ def tune_train_eval(loader, model, criterion, config, tuned, reporter):
 
                 test_epoch(testLoader, model, criterion, config)
 
+def setExperimentConfigParam(keyName, targetDict):
+    if keyName in config.keys():
+        if '[' in config[keyName] and ']' in config[keyName]:                               #grid-search
+            targetDict[keyName] = eval('tune.grid_search(' + config[keyName] + ')')
+        elif '(' in config[keyName] and ')' in config[keyName]:                             #random-search
+            targetDict[keyName] = eval('lambda spec:np.random.uniform' + config[keyName])
+        else:
+            targetDict[keyName] = float(config[keyName])
+
 if __name__ == '__main__':
     ray.init()
     sched = AsyncHyperBandScheduler(time_attr="training_iteration", reward_attr="neg_mean_loss", max_t=400, grace_period=20)
@@ -180,29 +189,17 @@ if __name__ == '__main__':
     experiment_config['exp']['run'] = "tune_train_eval"
     experiment_config['exp']['stop'] = {}
     experiment_config['exp']['stop']['training_iteration'] = int(config['epoch'])
+    experiment_config['exp']['local_dir'] = config['ray_dir']
+    if 'num_samples' in config.keys():
+        experiment_config['exp']['num_samples'] = int(config['num_samples'])
 
-    print ('tuning experiment config')
+    #set hypter paramter candidate 
+    experiment_config['exp']['config'] = {}
+    setExperimentConfigParam('learning_rate', experiment_config['exp']['config'])
+    setExperimentConfigParam('momentum', experiment_config['exp']['config'])
+        
+    print('tuning experiment config')
     print (experiment_config)
 
-    tune.run_experiments(
-        {
-            "exp": {
-                "stop": {
-                    "training_iteration": int(config['epoch']),
-                },
-                "trial_resources": {
-                    "gpu": 0,
-                    "cpu": 1,
-                },
-                "run": "tune_train_eval",
-                "num_samples": 5,
-                "config": {
-                    "learning_rate": lambda spec: np.random.uniform(0.001, 0.1),
-                    "momentum": lambda spec: np.random.uniform(0.1, 0.9),
-                },
-                "local_dir": config['ray_dir'],
-            }
-        },
-        verbose=0,
-        scheduler=sched)
+    tune.run_experiments(experiment_config, verbose=0, scheduler=sched)
 
