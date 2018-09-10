@@ -82,3 +82,7 @@ TERMINATED trials:
 
 And via accessing MLflow ui server written in config.ini, user can compare among tuned experiment more specifically.
 
+#### 4. To Do
+1. Implement abstract module for apply custom metric for validation
+2. After autokeras code analysis, checking how to combine this and autokeras
+
