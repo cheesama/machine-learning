@@ -8,20 +8,11 @@ Ray, MLflow, python >= 3.6
 
 ### Workflow
 
-```mermaid
-graph TD
-A[model]-->|custom architecture| D(train_eval)
-B[loss]-->|custom criterion|D
-C[loader]-->|custom data loader|D
-D-->|base experiment setting|E[Ray.Tune]
-F[config]-->|hyper parameter candidates|E
-E-->|hyper parameter tuning|G[MLflow]
-G-->|deliver experiment result|H[user]
-```
+![Overall Workflow](workflow.png)
 
 ### How to use
 
-#### 1. Component implmentation
+#### 1. Component implementation
 
 In Autorch, user have to implement their own data loader, loss function and model architecture. But It can be easily found in many examples such as MNIST or Cifar10 example in this repository.
 
