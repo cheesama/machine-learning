@@ -6,6 +6,19 @@ Autorch is an open source library for automated machine learning hyper parameter
 
 Ray, MLflow, python >= 3.6
 
+### Workflow
+
+```mermaid
+graph TD
+A[model]-->|custom architecture| D(train_eval)
+B[loss]-->|custom criterion|D
+C[loader]-->|custom data loader|D
+D-->|base experiment setting|E[Ray.Tune]
+F[config]-->|hyper parameter candidates|E
+E-->|hyper parameter tuning|G[MLflow]
+G-->|deliver experiment result|H[user]
+```
+
 ### How to use
 
 #### 1. Component implmentation
@@ -35,7 +48,7 @@ criterion = nn.CrossEntropyLoss()
 dataLoader = cifar10_image_loader.Cifar10ImageLoader(data_dir=config['data_dir'], batch_size=int(config['batch_size']))
 ```
 
-#### 2. Setting experiment configuration
+####2. Setting experiment configuration
 
 After importing loader, model and criterion implementation, user have to set their specific experiment condition. User can write their experiment condition to **config.ini**. 
 
@@ -77,5 +90,4 @@ TERMINATED trials:
 ```
 
 And via accessing MLflow ui server written in config.ini, user can compare among tuned experiment more specifically.
-
 
