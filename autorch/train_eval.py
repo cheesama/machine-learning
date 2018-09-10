@@ -18,16 +18,16 @@ from ray.tune.schedulers import AsyncHyperBandScheduler
 from model import cifar10_classification_model
 from loader import cifar10_image_loader
 
-#set the learning config
-config = configparser.ConfigParser()
-config.read('config.ini')
-config = config['cifar10'] #section config load
-
 #set the model
 model = cifar10_classification_model.Cifar10_classifier()
 
 #set the loss function(if you implement your own, import that custom loss class)
 criterion = nn.CrossEntropyLoss()
+
+#set the learning config
+config = configparser.ConfigParser()
+config.read('config.ini')
+config = config['cifar10'] #section config load
 
 #set the dataLoader
 dataLoader = cifar10_image_loader.Cifar10ImageLoader(data_dir=config['data_dir'], batch_size=int(config['batch_size']))
@@ -184,7 +184,15 @@ if __name__ == '__main__':
     if config['multiGPU'] == 'Y':
         experiment_config['exp']['trial_resources']['gpu'] = int(torch.cuda.device_count())
     else:
-        experiment_config['exp']['trial_resources']['gpu'] = 1
+        if torch.cuda.device_count > 0:
+            experiment_config['exp']['trial_resources']['gpu'] = 1
+        else:
+            experiment_config['exp']['trial_resources']['gpu'] = 0
+
+    if 'trial_resources_cpu' in config.keys():
+        experiment_config['exp']['trial_resources']['cpu'] = int(config['trial_resources_cpu'])
+    if 'trial_resources_gpu' in config.keys():
+        experiment_config['exp']['trial_resources']['gpu'] = int(config['trial_resources_gpu'])
 
     experiment_config['exp']['run'] = "tune_train_eval"
     experiment_config['exp']['stop'] = {}
