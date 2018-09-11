@@ -14,23 +14,24 @@ import ray
 from ray import tune    #for tuning hyper-parameters
 from ray.tune.schedulers import AsyncHyperBandScheduler
 
-#set custom model & data_loader classes
-from model import cifar10_classification_model
-from loader import cifar10_image_loader
-
-#set the model
-model = cifar10_classification_model.Cifar10_classifier()
-
-#set the loss function(if you implement your own, import that custom loss class)
-criterion = nn.CrossEntropyLoss()
-
 #set the learning config
 config = configparser.ConfigParser()
 config.read('config.ini')
 config = config['cifar10'] #section config load
 
+###set custom model & data_loader & criterion & metric classes
+from model import cifar10_classification_model
+from loader import cifar10_image_loader
+from metric.Metric import Accuracy, MSE
+
+#set the model
+model = cifar10_classification_model.Cifar10_classifier()
 #set the dataLoader
 dataLoader = cifar10_image_loader.Cifar10ImageLoader(data_dir=config['data_dir'], batch_size=int(config['batch_size']))
+#set the loss function(if you implement your own, import that custom loss class)
+criterion = nn.CrossEntropyLoss()
+customMetric = Accuracy
+##############################################################
 
 def tune_train_eval(loader, model, criterion, config, tuned, reporter):
     for key, value in tuned.items():
@@ -109,6 +110,10 @@ def tune_train_eval(loader, model, criterion, config, tuned, reporter):
         model.eval()
         test_loss = 0
         correct = 0
+
+        predictions = []
+        answers = []
+
         with torch.no_grad():
             for batch_idx, (data, target) in enumerate(loader):
                 if torch.cuda.is_available():
@@ -117,12 +122,15 @@ def tune_train_eval(loader, model, criterion, config, tuned, reporter):
 
                 output = model(data)
                 test_loss += criterion(output, target).sum().item() # sum up batch loss
-                pred = output.data.max(1)[1]                        # get the index of the max log-probability
-                correct += pred.eq(target.data).cpu().sum().item()  # classification task prediction & correction
+
+                #apply custom metric(in this case, Accuracy)
+                predictions += list(output.data.max(1)[1].cpu().numpy())    # get the index of the max log-probability
+                answers += list(target.data.cpu().numpy()) 
 
         test_loss /= len(loader.dataset)
-        test_accuracy = 100.0 * correct / len(loader.dataset)
-        print('\nTest set: Average loss: {:.4f}, Accuracy: {}/{} ({:.0f}%)\n'.format(test_loss, correct, len(loader.dataset), test_accuracy))
+
+        test_accuracy = customMetric.evaluate(predictions, answers)
+        print('\nTest set: Average loss: {:.4f}, Accuracy: ({:.2f}%)\n'.format(test_loss, test_accuracy * 100))
 
         if 'mlflow_tracking_URI' in config.keys():
             mlflow.log_metric('test_loss', test_loss)
