@@ -48,6 +48,21 @@ customMetric = Accuracy
 
 #### 2. Setting experiment configuration
 
+##### 2-1. Applying custom metric to test_epoch module
+
+After setting custom metric for measuring model performance, user have to apply that function to **test_epoch** function.
+Below is a example of classification accuracy
+
+```python
+#apply custom metric(in this case, Accuracy)
+predictions += list(output.data.max(1)[1].cpu().numpy())    # get the index of the max log-probability
+answers += list(target.data.cpu().numpy())
+
+test_accuracy = customMetric.evaluate(predictions, answers)
+```
+
+##### 2-2. Setting configuration to config.ini file
+
 After importing loader, model and criterion implementation, user have to set their specific experiment condition. User can write their experiment condition to **config.ini**. 
 
 Here is Instruction of variety of variables in **config.ini**. Please refer example file.
@@ -90,6 +105,6 @@ TERMINATED trials:
 And via accessing MLflow ui server written in config.ini, user can compare among tuned experiment more specifically.
 
 #### 4. To Do
-1. Implement abstract module for apply custom metric for validation
+1. Adding more optimizer options to config.ini to support various mode
 2. After autokeras code analysis, checking how to combine this and autokeras
 
