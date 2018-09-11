@@ -72,6 +72,12 @@ def tune_train_eval(loader, model, criterion, config, tuned, reporter):
 
     if 'momentum' in config.keys():
         optimizer.param_groups[0]['momentum'] = float(config['momentum'])
+    if 'lr_deacy' in config.keys():
+        optimizer.param_groups[0]['lr_decay'] = float(config['lr_decay'])
+    if 'weight_deacy' in config.keys():
+        optimizer.param_groups[0]['weight_decay'] = float(config['weight_decay'])
+    if 'amsgrad' in config.keys():
+        optimizer.param_groups[0]['amsgrad'] = eval(config['amsgrad'])
     if 'weight_deacy' in config.keys():
         optimizer.param_groups[0]['weight_decay'] = float(config['weight_decay'])
     if 'nesterov' in config.keys():
@@ -171,7 +177,7 @@ def setExperimentConfigParam(keyName, targetDict):
         elif '(' in config[keyName] and ')' in config[keyName]:                             #random-search
             targetDict[keyName] = eval('lambda spec:np.random.uniform' + config[keyName])
         else:
-            targetDict[keyName] = float(config[keyName])
+            targetDict[keyName] = eval(config[keyName].strip())
 
 if __name__ == '__main__':
     ray.init()
@@ -213,7 +219,10 @@ if __name__ == '__main__':
     experiment_config['exp']['config'] = {}
     setExperimentConfigParam('learning_rate', experiment_config['exp']['config'])
     setExperimentConfigParam('momentum', experiment_config['exp']['config'])
-        
+    setExperimentConfigParam('lr_decay', experiment_config['exp']['config'])
+    setExperimentConfigParam('weight_decay', experiment_config['exp']['config'])
+    setExperimentConfigParam('amsgrad', experiment_config['exp']['config'])
+    setExperimentConfigParam('nesterov', experiment_config['exp']['config'])
     print('tuning experiment config')
     print (experiment_config)
 

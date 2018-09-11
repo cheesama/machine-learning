@@ -2,15 +2,15 @@
 
 Autorch is an open source library for automated machine learning hyper parameter tuning using PyTorch. The ultimate goal of this tool is to provide convenient logging & status function about configuration which user set hyper parameters.
 
-### Requirements
+## Requirements
 
-Ray, MLflow, python >= 3.6
+Ray, MLflow, python >= 3.6, pytorch==0.4.0, keras, tensorflow
 
-### Workflow
+## Workflow
 
 ![Overall Workflow](workflow.png)
 
-### How to use
+## How to use
 
 #### 1. Component implementation
 
@@ -104,7 +104,8 @@ TERMINATED trials:
 
 And via accessing MLflow ui server written in config.ini, user can compare among tuned experiment more specifically.
 
-#### 4. To Do
+## To Do
 1. Adding more optimizer options to config.ini to support various mode
-2. After autokeras code analysis, checking how to combine this and autokeras
+2. Supporting convert function from pytroch model to keras(tesorflow) model
+3. After autokeras code analysis, checking how to combine this and autokeras
 
