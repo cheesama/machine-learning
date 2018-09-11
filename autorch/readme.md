@@ -21,22 +21,29 @@ In Autorch, user have to implement their own data loader, loss function and mode
 | Model archtecture | folder in 'model' / implement model architecture             |
 | Loss function     | folder in 'loss' / implment criterion to calculate back propagation |
 | Data loader       | folder in 'loader' / impelement data ETL and augmentation logic |
+| Metric            | folder in 'metric' / implement model performance measure function |
 
 After these 3 components are implemented(or re-use other one), user have to import and set these implementaion on **train_eval.py**
 
 ```python
-#set custom model & data_loader classes
+#set the learning config
+config = configparser.ConfigParser()
+config.read('config.ini')
+config = config['cifar10'] #section config load
+
+###set custom model & data_loader & criterion & metric classes
 from model import cifar10_classification_model
 from loader import cifar10_image_loader
+from metric.Metric import Accuracy, MSE
 
 #set the model
 model = cifar10_classification_model.Cifar10_classifier()
-
-#set the loss function(if you implement your own, import that custom loss class)
-criterion = nn.CrossEntropyLoss()
-
 #set the dataLoader
 dataLoader = cifar10_image_loader.Cifar10ImageLoader(data_dir=config['data_dir'], batch_size=int(config['batch_size']))
+#set the loss function(if you implement your own, import that custom loss class)
+criterion = nn.CrossEntropyLoss()
+customMetric = Accuracy
+##############################################################
 ```
 
 #### 2. Setting experiment configuration
