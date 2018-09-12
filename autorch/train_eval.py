@@ -19,6 +19,11 @@ config = configparser.ConfigParser()
 config.read('config.ini')
 config = config['cifar10'] #section config load
 
+def setConfigFile(configPath='config.ini', sectionName):
+    config = configparser.ConfigParser()
+    config.read(configPath)
+    config = config[sectionName]
+
 ###set custom model & data_loader & criterion & metric classes
 from model import cifar10_classification_model
 from loader import cifar10_image_loader
@@ -31,6 +36,19 @@ dataLoader = cifar10_image_loader.Cifar10ImageLoader(data_dir=config['data_dir']
 #set the loss function(if you implement your own, import that custom loss class)
 criterion = nn.CrossEntropyLoss()
 customMetric = Accuracy
+
+def setCustomModel(customModel):
+    model = customModel
+
+def setCustomDataLoader(customDataLoader):
+    dataLoader = customDataLoader
+
+def setCriterion(customLoss):
+    criterion = customLoss
+
+def setCustomMetric(metric):
+    customMetric = metric
+
 ##############################################################
 
 def tune_train_eval(loader, model, criterion, config, tuned, reporter):
