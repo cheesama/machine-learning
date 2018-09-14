@@ -7,7 +7,7 @@ from torch.utils.data import Dataset
 from tqdm import tqdm
 
 class WiderFaceDataset(Dataset):
-    def __init__(self, image_dir_path, annotation_path, rescale_size=224, transform=None):
+    def __init__(self, image_dir_path, annotation_path, rescale_size=640, transform=None):
         super().__init__()
         self.image_dir_path = image_dir_path
         self.transform = transform
@@ -26,18 +26,17 @@ class WiderFaceDataset(Dataset):
                 bboxNum = int(annotationFile.readline().strip())
                 for i in range(bboxNum):
                     bboxInfo = annotationFile.readline()
-                    if bboxInfo.split()[7] == '0':
-                        continue
-
+        
                     x1 = float(bboxInfo.split()[0])
                     y1 = float(bboxInfo.split()[1])
                     x2 = x1 + float(bboxInfo.split()[2])
                     y2 = y1 + float(bboxInfo.split()[3])
+                    cls = int(bboxInfo.split()[7])
 
                     self.imagePathList.append(image_dir_path + os.sep + imagePath)
-                    self.bboxList.append([x1, y1, x2, y2])
+                    self.bboxList.append([x1, y1, x2, y2, cls])
 
-        print ('image & annotataion mapping done')
+        print ('image & annotatation mapping done: ' + str(len(self.bboxList)) + ' annotations exist.')
                     
     def __len__(self):
         return len(self.bboxList)
