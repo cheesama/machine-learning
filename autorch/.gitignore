@@ -1,5 +1,2 @@
-data
-*/data/*
-__pycache__
-*/mlruns/*
-*/tuned_result/*
+*mlrun*
+*tuned_result*

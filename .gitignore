@@ -1,5 +1,10 @@
 data
 */data/*
 __pycache__
-*/mlruns/*
-*/tuned_result/*
+*/mlruns
+*/tuned_result
+.idea
+*/build
+*/dist
+*.egg-info
+

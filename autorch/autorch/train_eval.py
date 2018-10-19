@@ -75,7 +75,12 @@ def tune_train_eval(loader, model, criterion, metric, config, tuned, reporter):
     testLoader = loader.testLoader
 
     def train_epoch(epoch, loader, model, criterion, config, optimizer):
-        model.train()
+        if type(model) == list:
+            for eachModel in model:
+                eachModel.train()
+        else:
+            model.train()
+
         for batch_idx, (data, target) in enumerate(loader):
             if torch.cuda.is_available():
                 data, target = data.cuda(), target.cuda()
@@ -173,11 +178,17 @@ class Tuning():
     def setCustomModel(self, customModel):
         self.model = customModel
 
+    def setCustomModels(self, customModelList):
+        self.models = customModelList
+
     def setCustomDataLoader(self, customDataLoader):
         self.dataLoader = customDataLoader
 
     def setCriterion(self, customLoss):
         self.criterion = customLoss
+
+    def setCriterions(self, customLosses):
+        self.criterions = customLosses
 
     def setCustomMetric(self, metric):
         self.customMetric = metric
