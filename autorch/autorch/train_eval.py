@@ -14,44 +14,7 @@ import ray
 from ray import tune    #for tuning hyper-parameters
 from ray.tune.schedulers import AsyncHyperBandScheduler
 
-#set the learning config
-config = configparser.ConfigParser()
-config.read('config.ini')
-config = config['cifar10'] #section config load
-
-def setConfigFile(configPath='config.ini', sectionName):
-    config = configparser.ConfigParser()
-    config.read(configPath)
-    config = config[sectionName]
-
-###set custom model & data_loader & criterion & metric classes
-from model import cifar10_classification_model
-from loader import cifar10_image_loader
-from metric.Metric import Accuracy, MSE
-
-#set the model
-model = cifar10_classification_model.Cifar10_classifier()
-#set the dataLoader
-dataLoader = cifar10_image_loader.Cifar10ImageLoader(data_dir=config['data_dir'], batch_size=int(config['batch_size']))
-#set the loss function(if you implement your own, import that custom loss class)
-criterion = nn.CrossEntropyLoss()
-customMetric = Accuracy
-
-def setCustomModel(customModel):
-    model = customModel
-
-def setCustomDataLoader(customDataLoader):
-    dataLoader = customDataLoader
-
-def setCriterion(customLoss):
-    criterion = customLoss
-
-def setCustomMetric(metric):
-    customMetric = metric
-
-##############################################################
-
-def tune_train_eval(loader, model, criterion, config, tuned, reporter):
+def tune_train_eval(loader, model, criterion, metric, config, tuned, reporter):
     for key, value in tuned.items():
         config[key] = str(value)
 
@@ -108,8 +71,8 @@ def tune_train_eval(loader, model, criterion, config, tuned, reporter):
             os.mkdir(config['model_save_dir'])
 
     #prepare trainLoder, testLoder seperately
-    trainLoader = dataLoader.trainLoader
-    testLoader = dataLoader.testLoader
+    trainLoader = loader.trainLoader
+    testLoader = loader.testLoader
 
     def train_epoch(epoch, loader, model, criterion, config, optimizer):
         model.train()
@@ -130,7 +93,7 @@ def tune_train_eval(loader, model, criterion, config, tuned, reporter):
                     if 'mlflow_tracking_URI' in config.keys():
                         mlflow.log_metric('train_loss', loss.data.item())
 
-    def test_epoch(loader, model, criterion, config):
+    def test_epoch(loader, model, criterion, metric, config):
         model.eval()
         test_loss = 0
         correct = 0
@@ -153,7 +116,7 @@ def tune_train_eval(loader, model, criterion, config, tuned, reporter):
 
         test_loss /= len(loader.dataset)
 
-        test_accuracy = customMetric.evaluate(predictions, answers)
+        test_accuracy = metric.evaluate(predictions, answers)
         print('\nTest set: Average loss: {:.4f}, Accuracy: ({:.2f}%)\n'.format(test_loss, test_accuracy * 100))
 
         if 'mlflow_tracking_URI' in config.keys():
@@ -186,9 +149,9 @@ def tune_train_eval(loader, model, criterion, config, tuned, reporter):
                             torch.save(model, os.getcwd() + os.sep + config['model_save_dir'] + os.sep + config['model_name_prefix'] + '_epoch_' + str(epoch) + '.pkl')
                         print ('model saved: ' + os.getcwd() + os.sep + config['model_save_dir'] + os.sep + config['model_name_prefix'] + '_epoch_' + str(epoch) + '.pkl')
 
-                test_epoch(testLoader, model, criterion, config)
+                test_epoch(testLoader, model, criterion, metric, config)
 
-def setExperimentConfigParam(keyName, targetDict):
+def setExperimentConfigParam(config, keyName, targetDict):
     if keyName in config.keys():
         if '[' in config[keyName] and ']' in config[keyName]:                               #grid-search
             targetDict[keyName] = eval('tune.grid_search(' + config[keyName] + ')')
@@ -197,52 +160,76 @@ def setExperimentConfigParam(keyName, targetDict):
         else:
             targetDict[keyName] = eval(config[keyName].strip())
 
-if __name__ == '__main__':
-    ray.init()
-    sched = AsyncHyperBandScheduler(time_attr="training_iteration", reward_attr="neg_mean_loss", max_t=400, grace_period=20)
-    tune.register_trainable("tune_train_eval", lambda tuned, rprtr: tune_train_eval(dataLoader, model, criterion, config, tuned, rprtr))
+class Tuning():
+    def __init__(self):
+        ray.init()
+        self.sched = AsyncHyperBandScheduler(time_attr="training_iteration", reward_attr="neg_mean_loss", max_t=400, grace_period=20)
 
-    if 'mlflow_tracking_URI' in config.keys():
-        host = config['mlflow_tracking_URI'].split('//')[1].split(':')[0]
-        port = config['mlflow_tracking_URI'].split('//')[1].split(':')[1]
-        os.system('mlflow ui -h ' + host + ' -p ' + port + ' &')
-        print ('mlflow server start')
+    def setConfigFile(self, sectionName, configPath='config.ini'):
+        config = configparser.ConfigParser()
+        config.read(configPath)
+        self.config = config[sectionName]
 
-    experiment_config = {}
-    experiment_config['exp'] = {}
+    def setCustomModel(self, customModel):
+        self.model = customModel
 
-    experiment_config['exp']['trial_resources']={}
+    def setCustomDataLoader(self, customDataLoader):
+        self.dataLoader = customDataLoader
 
-    if config['multiGPU'] == 'Y':
-        experiment_config['exp']['trial_resources']['gpu'] = int(torch.cuda.device_count())
-    else:
-        if torch.cuda.device_count > 0:
-            experiment_config['exp']['trial_resources']['gpu'] = 1
+    def setCriterion(self, customLoss):
+        self.criterion = customLoss
+
+    def setCustomMetric(self, metric):
+        self.customMetric = metric
+
+    def fit(self):
+        if self.config is None:
+            raise ValueError('Have to set config file')
+
+        tune.register_trainable("tune_train_eval", lambda tuned, rprtr:
+        tune_train_eval(self.dataLoader, self.model, self.criterion, self.customMetric, self.config, tuned, rprtr))
+
+        if 'mlflow_tracking_URI' in self.config.keys():
+            host = self.config['mlflow_tracking_URI'].split('//')[1].split(':')[0]
+            port = self.config['mlflow_tracking_URI'].split('//')[1].split(':')[1]
+            os.system('mlflow ui -h ' + host + ' -p ' + port + ' &')
+            print ('mlflow server start')
+
+        experiment_config = {}
+        experiment_config['exp'] = {}
+
+        experiment_config['exp']['trial_resources']={}
+
+        if self.config['multiGPU'] == 'Y':
+            experiment_config['exp']['trial_resources']['gpu'] = int(torch.cuda.device_count())
         else:
-            experiment_config['exp']['trial_resources']['gpu'] = 0
+            if torch.cuda.device_count > 0:
+                experiment_config['exp']['trial_resources']['gpu'] = 1
+            else:
+                experiment_config['exp']['trial_resources']['gpu'] = 0
 
-    if 'trial_resources_cpu' in config.keys():
-        experiment_config['exp']['trial_resources']['cpu'] = int(config['trial_resources_cpu'])
-    if 'trial_resources_gpu' in config.keys():
-        experiment_config['exp']['trial_resources']['gpu'] = int(config['trial_resources_gpu'])
+        if 'trial_resources_cpu' in self.config.keys():
+            experiment_config['exp']['trial_resources']['cpu'] = int(self.config['trial_resources_cpu'])
+        if 'trial_resources_gpu' in self.config.keys():
+            experiment_config['exp']['trial_resources']['gpu'] = int(self.config['trial_resources_gpu'])
 
-    experiment_config['exp']['run'] = "tune_train_eval"
-    experiment_config['exp']['stop'] = {}
-    experiment_config['exp']['stop']['training_iteration'] = int(config['epoch'])
-    experiment_config['exp']['local_dir'] = config['ray_dir']
-    if 'num_samples' in config.keys():
-        experiment_config['exp']['num_samples'] = int(config['num_samples'])
+        experiment_config['exp']['run'] = "tune_train_eval"
+        experiment_config['exp']['stop'] = {}
+        experiment_config['exp']['stop']['training_iteration'] = int(self.config['epoch'])
+        experiment_config['exp']['local_dir'] = self.config['ray_dir']
+        if 'num_samples' in self.config.keys():
+            experiment_config['exp']['num_samples'] = int(self.config['num_samples'])
 
-    #set hypter paramter candidate 
-    experiment_config['exp']['config'] = {}
-    setExperimentConfigParam('learning_rate', experiment_config['exp']['config'])
-    setExperimentConfigParam('momentum', experiment_config['exp']['config'])
-    setExperimentConfigParam('lr_decay', experiment_config['exp']['config'])
-    setExperimentConfigParam('weight_decay', experiment_config['exp']['config'])
-    setExperimentConfigParam('amsgrad', experiment_config['exp']['config'])
-    setExperimentConfigParam('nesterov', experiment_config['exp']['config'])
-    print('tuning experiment config')
-    print (experiment_config)
+        #set hyper parameter candidate 
+        experiment_config['exp']['config'] = {}
+        setExperimentConfigParam(self.config, 'learning_rate', experiment_config['exp']['config'])
+        setExperimentConfigParam(self.config, 'momentum', experiment_config['exp']['config'])
+        setExperimentConfigParam(self.config, 'lr_decay', experiment_config['exp']['config'])
+        setExperimentConfigParam(self.config, 'weight_decay', experiment_config['exp']['config'])
+        setExperimentConfigParam(self.config, 'amsgrad', experiment_config['exp']['config'])
+        setExperimentConfigParam(self.config, 'nesterov', experiment_config['exp']['config'])
+        print('tuning experiment config')
+        print (experiment_config)
 
-    tune.run_experiments(experiment_config, verbose=0, scheduler=sched)
+        tune.run_experiments(experiment_config, verbose=0, scheduler=self.sched)
 
