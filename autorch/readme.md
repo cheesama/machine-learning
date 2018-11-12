@@ -14,58 +14,36 @@ Ray, MLflow, python >= 3.6, pytorch==0.4.0, keras, tensorflow
 
 #### 1. Component implementation
 
-In Autorch, user have to implement their own data loader, loss function and model architecture. But It can be easily found in many examples such as MNIST or Cifar10 example in this repository.
-
-| Components        | Location / Role                                              |
-| ----------------- | ------------------------------------------------------------ |
-| Model archtecture | folder in 'model' / implement model architecture             |
-| Loss function     | folder in 'loss' / implment criterion to calculate back propagation |
-| Data loader       | folder in 'loader' / impelement data ETL and augmentation logic |
-| Metric            | folder in 'metric' / implement model performance measure function |
-
-After these 3 components are implemented(or re-use other one), user have to import and set these implementaion on **train_eval.py**
+In Autorch, user has to implement their own data loader, loss function and model architecture. But It can be easily found in many examples such as MNIST or Cifar10 example in this repository.
 
 ```python
-#set the learning config
-config = configparser.ConfigParser()
-config.read('config.ini')
-config = config['cifar10'] #section config load
-
-###set custom model & data_loader & criterion & metric classes
-from model import cifar10_classification_model
-from loader import cifar10_image_loader
-from metric.Metric import Accuracy, MSE
-
-#set the model
-model = cifar10_classification_model.Cifar10_classifier()
-#set the dataLoader
-dataLoader = cifar10_image_loader.Cifar10ImageLoader(data_dir=config['data_dir'], batch_size=int(config['batch_size']))
-#set the loss function(if you implement your own, import that custom loss class)
-criterion = nn.CrossEntropyLoss()
-customMetric = Accuracy
-##############################################################
+#after install autorch
+from autorch import train_eval
+tuning = train_eval.Tuning()
 ```
+After tuning wrapper call, compoenents can be set like below
+
+| Components        | API                                              |
+| ------------------ | ------------------------------------------------------------- |
+| Model architecture | tuning.setCustomModel(model)                                 |
+| Loss function      | tuning.setCriterion(criterion)                                |
+| Data loader        | tuning.setCustomDataLoader(dataLoader)                        |
+| Metric             | tuning.setCustomMetric(customMetric)                          |
 
 #### 2. Setting experiment configuration
 
 ##### 2-1. Applying custom metric to test_epoch module
 
-After setting custom metric for measuring model performance, user have to apply that function to **test_epoch** function.
-Below is a example of classification accuracy
+After these 4 components are implemented(or re-use other one), user can set experiment config like below
 
 ```python
-#apply custom metric(in this case, Accuracy)
-predictions += list(output.data.max(1)[1].cpu().numpy())    # get the index of the max log-probability
-answers += list(target.data.cpu().numpy())
-
-test_accuracy = customMetric.evaluate(predictions, answers)
+#set the learning config
+tuning.setConfigFile('cifar10','config.ini')
 ```
 
 ##### 2-2. Setting configuration to config.ini file
 
-After importing loader, model and criterion implementation, user have to set their specific experiment condition. User can write their experiment condition to **config.ini**. 
-
-Here is Instruction of variety of variables in **config.ini**. Please refer example file.
+Here is Instruction of variety of variables in **config.ini**. Please refer example file.(based on example)
 
 | Variable Name            | Role                                                         |
 | ------------------------ | ------------------------------------------------------------ |
