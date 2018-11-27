@@ -85,5 +85,5 @@ And via accessing MLflow ui server written in config.ini, user can compare among
 ## To Do
 1. Adding more optimizer options to config.ini to support various mode
 2. Supporting convert function from pytroch model to keras(tesorflow) model
-3. After autokeras code analysis, checking how to combine this and autokeras
+3. visualization function support
 
