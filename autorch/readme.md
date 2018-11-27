@@ -4,7 +4,13 @@ Autorch is an open source library for automated machine learning hyper parameter
 
 ## Requirements
 
-Ray, MLflow, python >= 3.6, pytorch==0.4.0, keras, tensorflow
+torch,
+tensorflow,
+keras,
+ray,
+mlflow,
+pytorch2keras,
+pytorch-ignite
 
 ## Workflow
 
