@@ -4,4 +4,4 @@ keras
 ray
 mlflow
 pytorch2keras
-visualdl
+pytorch-ignite
