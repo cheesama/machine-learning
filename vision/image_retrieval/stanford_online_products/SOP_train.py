@@ -10,12 +10,17 @@ from ignite.engine import Events, create_supervised_trainer, create_supervised_e
 from ignite.metrics import Accuracy, Loss
 
 from tensorboardX import SummaryWriter
-
 from argparse import ArgumentParser
+from sklearn.metrics import recall_score
+from tqdm import tqdm
 
 from SOP_DataLoader import SOPDataset
 from SOP_Losses import MultiBatch_Contrastive_Loss
 from SOP_Models import SOP_resnet18_embedding
+
+import faiss
+import numpy as np
+import os, sys
 
 def create_summary_writer(model, data_loader, log_dir):
     writer = SummaryWriter(log_dir=log_dir)
@@ -32,12 +37,54 @@ def create_summary_writer(model, data_loader, log_dir):
     
     return writer
 
+
+def calculate_recall_score(model, loader, feature_dim=1024, K=1, show_embedding=False, logger=None):
+    model.eval()
+
+    image_features = torch.Tensor(0, feature_dim).cpu().numpy()
+    labels = np.array([])
+
+    #based on resnet18 model input
+    image_collection = torch.Tensor(0, 3, 224,224).cpu()
+
+    print ('Building Image features')
+    with torch.no_grad():
+        for images, batch_labels in tqdm(loader):
+            batch_features = model(images)     
+            image_features = np.concatenate((image_features, batch_features.cpu().numpy()), axis=0)
+
+            labels = np.concatenate((labels, batch_labels), axis=0)
+
+            if show_embedding:
+                image_collection = torch.cat((image_collection, images))
+
+    if show_embedding and logger:
+        logger.add_embedding(torch.from_numpy(image_features), metadata=torch.from_numpy(labels), label_img=image_collection)
+
+    #feature array self indexing
+    index = faiss.IndexFlatL2(feature_dim)
+    index.add(image_features)
+
+    dims, positions = index.search(image_features, K+1)
+
+    #calculate recall@K score
+    total_samples = image_features.shape[0]
+    true_positive_samples = 0.0
+
+    print ('Calculating Recall@{} Score'.format(K))
+    for currentIndex in range(total_samples):
+        if labels[currentIndex] in labels[positions[currentIndex]]:
+            true_positive_samples += 1
+
+    return float(true_positive_samples / float(total_samples))
+
+
 def run(targetFolder, trainFile, valFile, train_transform, val_transform, model, epochs, lr, momentum, log_interval, log_dir, batchSize=256):
     train_dataset = SOPDataset(targetFolder, trainFile, transform=train_transform)
     val_dataset = SOPDataset(targetFolder, valFile, transform=val_transform)
 
     train_loader = DataLoader(train_dataset, batch_size=batchSize, shuffle=False)
-    val_loader = DataLoader(train_dataset, batch_size=batchSize, shuffle=False)
+    val_loader = DataLoader(train_dataset, batch_size=batchSize, shuffle=True)
     
     writer = create_summary_writer(model, train_loader, log_dir)
     device = 'cpu'
@@ -45,7 +92,7 @@ def run(targetFolder, trainFile, valFile, train_transform, val_transform, model,
     if torch.cuda.is_available():
         device = 'cuda'
 
-    optimizer = SGD(model.parameters(), lr=lr, momentum=momentum)
+    #optimizer = SGD(model.parameters(), lr=lr, momentum=momentum)
     optimizer = Adam(model.parameters(), lr=lr)
     
     criterion = MultiBatch_Contrastive_Loss()
@@ -68,27 +115,23 @@ def run(targetFolder, trainFile, valFile, train_transform, val_transform, model,
                   "".format(engine.state.epoch, iter, len(train_loader), engine.state.output))
             writer.add_scalar("training/loss", engine.state.output, engine.state.iteration)
     
-    #@trainer.on(Events.EPOCH_COMPLETED)
-    def log_training_results(engine):
-        evaluator.run(train_loader)
-        metrics = evaluator.state.metrics
-        avg_accuracy = metrics['accuracy']
-        avg_nll = metrics['nll']
-        print("Training Results - Epoch: {}  Avg accuracy: {:.2f} Avg loss: {:.2f}"
-              .format(engine.state.epoch, avg_accuracy, avg_nll))
-        writer.add_scalar("training/avg_loss", avg_nll, engine.state.epoch)
-        writer.add_scalar("training/avg_accuracy", avg_accuracy, engine.state.epoch)
-
-    #@trainer.on(Events.EPOCH_COMPLETED)
+    @trainer.on(Events.EPOCH_COMPLETED)
     def log_validation_results(engine):
-        evaluator.run(val_loader)
-        metrics = evaluator.state.metrics
-        avg_accuracy = metrics['accuracy']
-        avg_nll = metrics['nll']
-        print("Validation Results - Epoch: {}  Avg accuracy: {:.2f} Avg loss: {:.2f}"
-              .format(engine.state.epoch, avg_accuracy, avg_nll))
-        writer.add_scalar("valdation/avg_loss", avg_nll, engine.state.epoch)
-        writer.add_scalar("valdation/avg_accuracy", avg_accuracy, engine.state.epoch)
+        avg_recall = calculate_recall_score(model, train_loader)
+        print("Training Results - Epoch: {}  Avg Recall: {:.2f}".format(engine.state.epoch, avg_recall))
+        writer.add_scalar("training/avg_recall", avg_recall, engine.state.epoch)
+
+        avg_recall = calculate_recall_score(model, val_loader, show_embedding=True, logger=writer)
+        print("Validation Results - Epoch: {}  Avg Recall: {:.2f}".format(engine.state.epoch, avg_recall))
+        writer.add_scalar("valdation/avg_recall", avg_recall, engine.state.epoch)
+
+        if not os.path.exists('models'):
+            os.mkdir('models')
+
+        if model.module:
+            torch.save(model.module, 'models/' + 'SOP_resnet18_model_epoch_' + str(engine.state.epoch) + '_recall_' + str(avg_recall) + '.pth') 
+        else:
+            torch.save(model, 'models/' + 'SOP_resnet18_model_epoch_' + str(engine.state.epoch) + '_recall_' + str(avg_recall) + '.pth') 
 
     # kick everything off
     trainer.run(train_loader, max_epochs=epochs)
