@@ -59,7 +59,8 @@ def calculate_recall_score(model, loader, feature_dim=1024, K=1, show_embedding=
                 image_collection = torch.cat((image_collection, images))
 
     if show_embedding and logger:
-        logger.add_embedding(torch.from_numpy(image_features), metadata=torch.from_numpy(labels), label_img=image_collection)
+        #for fast loading, just sample embeddings
+        logger.add_embedding(torch.from_numpy(image_features)[:100], metadata=torch.from_numpy(labels)[:100], label_img=image_collection[:100])
 
     #feature array self indexing
     index = faiss.IndexFlatL2(feature_dim)
@@ -145,7 +146,7 @@ if __name__ == "__main__":
     parser.add_argument('--val', help='image pair val txt file')
     parser.add_argument('--batch_size', type=int, default=1024, help='input batch size for training (default: 256)')
     parser.add_argument('--epochs', type=int, default=30, help='number of epochs to train (default: 30)')
-    parser.add_argument('--lr', type=float, default=0.01, help='learning rate (default: 0.01)')
+    parser.add_argument('--lr', type=float, default=0.002, help='learning rate (default: 0.002)')
     parser.add_argument('--momentum', type=float, default=0.5, help='SGD momentum (default: 0.5)')
     parser.add_argument('--log_interval', type=int, default=1, help='how many batches to wait before logging training status')
     parser.add_argument("--log_dir", type=str, default="tensorboard_logs", help="log directory for Tensorboard log output")
