@@ -14,7 +14,7 @@ def twitter_tokenizer(sentence):
     word_array.append('[CLS]')
 
     #infer http://konlpy.org/en/v0.4.4/api/konlpy.tag/
-    for eachPart in tokenizer.pos(sentence, norm=True, stem=True):
+    for eachPart in tokenizer.pos(sentence, norm=True):
         word = eachPart[0]
         part = eachPart[1]
 

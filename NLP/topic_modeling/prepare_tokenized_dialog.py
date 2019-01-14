@@ -23,7 +23,7 @@ def twitter_tokenizer(sentence):
         word = eachPart[0]
         part = eachPart[1]
 
-        if part == 'Alpha':
+        if part == 'Alpha' or part == 'Punctuation':
             continue
 
         word_array.append(word + '/' + part)
