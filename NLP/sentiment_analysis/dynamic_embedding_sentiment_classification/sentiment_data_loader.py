@@ -13,9 +13,9 @@ def create_data_loader(filePath, batchSize=128, tokenizer=twitter_tokenizer, bui
     text_field = data.Field(tokenize=tokenizer, sequential=True, init_token='[CLS]', eos_token='[SEP]')
     label_field = data.Field(sequential=False, use_vocab=False, postprocessing=data.Pipeline(postprocess))
 
-	dataset = data.TabularDataset(path=filePath, format='tsv', fields=[('id', None), ('document', text_field), ('label', label_field)], filter_pred=filter_pred)
+    dataset = data.TabularDataset(path=filePath, format='tsv', fields=[('id', None), ('document', text_field), ('label', label_field)], filter_pred=None)
 
-	dataLoader = data.Iterator(dataset=dataset, batch_size=batchSize, sort_key=lambda x: len(x.text), train=True, repeat=False, device=device)
+    dataLoader = data.Iterator(dataset=dataset, batch_size=batchSize, sort_key=lambda x: len(x.document), train=True, repeat=False, device=device)
     
     if build_vocab:
         print('Building Vocabulary of file - ' + filePath)

@@ -10,7 +10,7 @@ import torch.nn.functional as F
 class LayerNorm(nn.Module):
     "A layernorm module in the TF style (epsilon inside the square root)."
     def __init__(self, cfg, variance_epsilon=1e-12):
-        super().__init__()
+        super(LayerNorm, self).__init__()
         self.gamma = nn.Parameter(torch.ones(cfg.dim))
         self.beta  = nn.Parameter(torch.zeros(cfg.dim))
         self.variance_epsilon = variance_epsilon
@@ -25,15 +25,19 @@ class LayerNorm(nn.Module):
 class Dynamic_embeddings(nn.Module):
     "The embedding module from word, position and token_type embeddings."
     def __init__(self, cfg):
-        super().__init__()
+        super(Dynamic_embeddings, self).__init__()
+
+        #for square input form, fit max_seq_len as dim size
+        cfg.max_len = cfg.dim
+
         self.tok_embed = nn.Embedding(cfg.vocab_size, cfg.dim) # token embedding
         self.pos_embed = nn.Embedding(cfg.max_len, cfg.dim) # position embedding
         #self.seg_embed = nn.Embedding(cfg.n_segments, cfg.dim) # segment(token type) embedding
 
         self.norm = LayerNorm(cfg)
         self.drop = nn.Dropout(cfg.dropout)
-
-     def forward(self, x, seg=None):
+     
+    def forward(self, x, seg=None):
         seq_len = x.size(1)
         pos = torch.arange(seq_len, dtype=torch.long, device=x.device)
         pos = pos.unsqueeze(0).expand_as(x) # (S,) -> (B, S)
@@ -45,8 +49,11 @@ class Dynamic_embeddings(nn.Module):
 
 class WordCNN(nn.Module):
     def __init__(self, vocab_size, config):
+        super(WordCNN, self).__init__()
+
         #considering resnet18, hidden size is 224
         self.vocab_size = vocab_size
+        config.vocab_size = vocab_size
         self.embedding = Dynamic_embeddings(config)
 
         self.conv = nn.ModuleList([

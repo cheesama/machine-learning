@@ -30,6 +30,9 @@ class Sentiment_train_eval(object):
             for idx, batch in enumerate(tqdm(self.train_loader)):
                 text, label = batch.text, batch.label
                 text.data.t_()
+
+                print (text.data.shape)
+
                 prediction = self.model(text)
 
                 loss = self.loss_fn(prediction, label)
@@ -65,13 +68,14 @@ class Sentiment_train_eval(object):
 if __name__ == '__main__':
     parser = ArgumentParser()
     #data loader param
-    parser.add_argument('--train_file_path', default='', help='training file path')
-    parser.add_argument('--val_file_path', default='', help='validation file path')
+    parser.add_argument('--train_file_path', default='../data/naver_movie_sentiment/ratings_train.txt', help='training file path')
+    parser.add_argument('--val_file_path', default='../data/naver_movie_sentiment/ratings_test.txt', help='validation file path')
  
     #model param
-    parser.add_argument('--hidden_size', type=int, default=224)
+    parser.add_argument('--hidden_size', type=int, default=224)         #for filter setting
+    parser.add_argument('--dim', type=int, default=224)                 #for embedding setting
     parser.add_argument('--n_channel_per_window', type=int, default=2)
-    parser.add_argument('--label_size', type=int, decault=2)
+    parser.add_argument('--label_size', type=int, default=2)
     parser.add_argument('--dropout', type=float, default='0.5')
  
     #experiment param
@@ -79,16 +83,20 @@ if __name__ == '__main__':
     parser.add_argument('--lr', type=float, default=0.01, help='learning rate (default: 0.01)')
     parser.add_argument('--momentum', type=float, default=0.5, help='SGD momentum (default: 0.5)')
 
-    config = vars(parser.parse_args())
+    config = parser.parse_args()
 
     #data loader ready
-    train_loader, vocab_size = create_data_loader(train_file_path, build_vocab=True)
-    val_loader = create_data_loader(val_file_path)
+    train_loader, vocab_size = create_data_loader(config.train_file_path, build_vocab=True)
+    val_loader = create_data_loader(config.val_file_path)
+
+    #for test
+    batch = next(iter(train_loader))
+    print (batch.document.shape)
 
     #model ready
     model = WordCNN(vocab_size, config)
  
-    optimizer = SGD(model.parameters(), lr=config['lr'], momentum=config['momentum'])
+    optimizer = SGD(model.parameters(), lr=config.lr, momentum=config.momentum)
     loss_fn = nn.CrossEntropyLoss()
 
-    Evaluator = Sentiment_train_eval(train_loader, val_loader, optimizer, loss_fn, config)
+    Evaluator = Sentiment_train_eval(train_loader, val_loader, optimizer, loss_fn, vars(config))
