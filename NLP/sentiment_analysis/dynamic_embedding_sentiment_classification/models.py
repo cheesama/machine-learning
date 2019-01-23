@@ -56,21 +56,34 @@ class WordCNN(nn.Module):
         config.vocab_size = vocab_size
         self.embedding = Dynamic_embeddings(config)
 
+        in_channels = 1
+
         self.conv = nn.ModuleList([
             nn.Conv2d(
-                in_channels=2,
+                in_channels=in_channels,
                 out_channels=config.n_channel_per_window,
                 kernel_size=(3, config.hidden_size)),
 
             nn.Conv2d(
-                in_channels=2,
+                in_channels=in_channels,
                 out_channels=config.n_channel_per_window,
                 kernel_size=(4, config.hidden_size)),
 
             nn.Conv2d(
-                in_channels=2,
+                in_channels=in_channels,
                 out_channels=config.n_channel_per_window,
-                kernel_size=(5, config.hidden_size))
+                kernel_size=(5, config.hidden_size)),
+
+            nn.Conv2d(
+                in_channels=in_channels,
+                out_channels=config.n_channel_per_window,
+                kernel_size=(6, config.hidden_size)),
+
+            nn.Conv2d(
+                in_channels=in_channels,
+                out_channels=config.n_channel_per_window,
+                kernel_size=(7, config.hidden_size))
+
         ])
 
         n_total_channels = len(self.conv) * config.n_channel_per_window

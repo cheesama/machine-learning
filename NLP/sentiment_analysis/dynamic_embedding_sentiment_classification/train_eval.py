@@ -22,16 +22,14 @@ class Sentiment_train_eval(object):
         #turn on tracker
         mlflow.start_run()
 
-        for k, v in config.items():
-            mlflow.log_param(k, v)
+        for attr, value in self.config.items():
+            mlflow.log_param(attr, value)
 
-    def train(self):
-        for epoch in tqdm(range(self.config.epochs)):
+    def train_eval(self):
+        for epoch in tqdm(range(self.config['epochs'])):
             for idx, batch in enumerate(tqdm(self.train_loader)):
-                text, label = batch.text, batch.label
+                text, label = batch.document, batch.label
                 text.data.t_()
-
-                print (text.data.shape)
 
                 prediction = self.model(text)
 
@@ -42,27 +40,25 @@ class Sentiment_train_eval(object):
 
                 mlflow.log_metric('train_loss', loss.item())
 
-    def eval(self):
-        n_total_data = 0.0
-        n_correct = 0.0
+            n_total_data = 0.0
+            n_correct = 0.0
 
-        for idx, batch in enumerate(tqdm(self.train_loader)):
-            text, label = batch.text, batch.label
-            text.data.t_()
+            for idx, batch in enumerate(tqdm(self.val_loader)):
+                text, label = batch.document, batch.label
+                text.data.t_()
 
-            with torch.no_grad():
-                prediction = self.model(text)
+                with torch.no_grad():
+                    prediction = self.model(text)
 
-             # Calculate accuracy
-            n_total_data += len(label)
-            _, prediction = prediction.max(1)
-            n_correct += (prediction == label).sum().item()
+                 # Calculate accuracy
+                n_total_data += len(label)
+                _, prediction = prediction.max(1)
+                n_correct += (prediction == label).sum().item()
 
-        accuracy = n_correct / n_total_data
+            accuracy = n_correct / n_total_data
 
-        mlflow.log_metric('acc', accuracy)
+            mlflow.log_metric('acc', accuracy)
 
-    def endExp(self):
         mlflow.end_run()
 
 if __name__ == '__main__':
@@ -74,7 +70,7 @@ if __name__ == '__main__':
     #model param
     parser.add_argument('--hidden_size', type=int, default=224)         #for filter setting
     parser.add_argument('--dim', type=int, default=224)                 #for embedding setting
-    parser.add_argument('--n_channel_per_window', type=int, default=2)
+    parser.add_argument('--n_channel_per_window', type=int, default=3)
     parser.add_argument('--label_size', type=int, default=2)
     parser.add_argument('--dropout', type=float, default='0.5')
  
@@ -89,14 +85,11 @@ if __name__ == '__main__':
     train_loader, vocab_size = create_data_loader(config.train_file_path, build_vocab=True)
     val_loader = create_data_loader(config.val_file_path)
 
-    #for test
-    batch = next(iter(train_loader))
-    print (batch.document.shape)
-
     #model ready
     model = WordCNN(vocab_size, config)
  
     optimizer = SGD(model.parameters(), lr=config.lr, momentum=config.momentum)
     loss_fn = nn.CrossEntropyLoss()
 
-    Evaluator = Sentiment_train_eval(train_loader, val_loader, optimizer, loss_fn, vars(config))
+    trainer = Sentiment_train_eval(train_loader, val_loader, optimizer, loss_fn, vars(config))
+    trainer.train_eval()
