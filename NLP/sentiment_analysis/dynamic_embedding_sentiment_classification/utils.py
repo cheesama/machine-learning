@@ -2,12 +2,12 @@ import os, sys
 import pandas as pd
 import numpy as np
 
-from konlpy.tag import Twitter
 from tqdm import tqdm
 
-tokenizer = Twitter()
+from konlpy.tag import Twitter
+from khaiii import KhaiiiApi
 
-def twitter_tokenizer(sentence):
+def twitter_tokenizer(sentence, tokenizer=Twitter()):
     word_array = []
 
     #following 'BERT' tokenization
@@ -27,5 +27,8 @@ def twitter_tokenizer(sentence):
     word_array.append('[SEP]')
 
     return word_array
+
+def khaiii_tokenizer(sentence, tokenizer=KhaiiiApi()):
+    pass
 
 

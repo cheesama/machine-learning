@@ -1,10 +1,11 @@
-from models import WordCNN
 from sentiment_data_loader import create_data_loader
+from models import Word_Resnet
 
 from argparse import ArgumentParser
 from tqdm import tqdm
 from torch.nn import DataParallel
 from torch.optim import SGD
+from torchvision import models
 from bayes_opt import BayesianOptimization
 
 import torch
@@ -25,8 +26,6 @@ class Sentiment_train_eval(object):
             if isinstance(value, tuple):
                 pbounds[attr] = value
                 #self.config.pop(attr, None)
-
-        print (pbounds)
 
         bayes_optimizer = BayesianOptimization(f=self.bayes_opt_config_wrapper, pbounds=pbounds, random_state=88) 
         bayes_optimizer.maximize(init_points=config.init_points, n_iter=config.n_iter,)
@@ -49,11 +48,14 @@ class Sentiment_train_eval(object):
         optimizer = config.optimizer(self.model.parameters(), lr=self.config.lr, momentum=self.config.momentum)
         
         for attr, value in vars(self.config).items():
+            if attr == 'resnet_model':
+                continue
+
             mlflow.log_param(attr, value)
 
         for epoch in (range(self.config.epochs)):
             self.model.train()
-            #print ('train epoch: ', str(epoch))
+            print ('train epoch: ', str(epoch))
             for idx, batch in enumerate(self.train_loader):
                 text, label = batch.document, batch.label
                 
@@ -72,7 +74,7 @@ class Sentiment_train_eval(object):
             n_correct = 0.0
 
             self.model.eval()
-            #print ('eval epoch: ', str(epoch))
+            print ('eval epoch: ', str(epoch))
             for idx, batch in enumerate(self.val_loader):
                 text, label = batch.document, batch.label
 
@@ -99,7 +101,7 @@ if __name__ == '__main__':
     #data loader param
     parser.add_argument('--train_file_path', default='../data/naver_movie_sentiment/ratings_train.txt', help='training file path')
     parser.add_argument('--val_file_path', default='../data/naver_movie_sentiment/ratings_test.txt', help='validation file path')
-    parser.add_argument('--batch_size', type=int, default=2048)          #based on 12GB GPU Mem
+    parser.add_argument('--batch_size', type=int, default=512)          #based on 12GB GPU Mem
 
     #model param
     parser.add_argument('--hidden_size', type=int, default=224)         #for filter setting
@@ -107,7 +109,6 @@ if __name__ == '__main__':
     parser.add_argument('--n_channel_per_window', type=int, default=30)
     parser.add_argument('--label_size', type=int, default=2)
     parser.add_argument('--dropout', type=float, default='0.1')
-    parser.add_argument('--max_kernel_size', default=(5, 10), help='conv layer number having different kernel(window) size')
  
     #experiment param
     parser.add_argument('--epochs', type=int, default=40, help='number of epochs to train (default: 20)')
@@ -129,7 +130,8 @@ if __name__ == '__main__':
 
     #model ready
     config.vocab_size = vocab_size
-    model = WordCNN
+    model = Word_Resnet
+    config.resnet_model = models.resnet18()
 
     loss_fn = nn.CrossEntropyLoss()
 

@@ -21,7 +21,6 @@ class LayerNorm(nn.Module):
         x = (x - u) / torch.sqrt(s + self.variance_epsilon)
         return self.gamma * x + self.beta
 
-
 class Dynamic_embeddings(nn.Module):
     "The embedding module from word, position and token_type embeddings."
     def __init__(self, cfg):
@@ -37,54 +36,44 @@ class Dynamic_embeddings(nn.Module):
         self.norm = LayerNorm(cfg)
         self.drop = nn.Dropout(cfg.dropout)
      
-    def forward(self, x, seg=None):
-        seq_len = x.size(1)
-        pos = torch.arange(seq_len, dtype=torch.long, device=x.device)
-        pos = pos.unsqueeze(0).expand_as(x) # (S,) -> (B, S)
+    def forward(self, x):
+        seq_len = x.size()[1]
+        pos_forward = torch.arange(seq_len, dtype=torch.long, device=x.device)
+        pos_forward = pos_forward.unsqueeze(0).expand_as(x) # (S,) -> (B, S)
+        pos_backward = torch.arange(seq_len, dtype=torch.long, device=x.device).flip(0)
+        pos_backward = pos_backward.unsqueeze(0).expand_as(x) # (S,) -> (B, S)
+
+        #generate mask embedding
+        x_mask = self.tok_embed(x)
+        masking_target_prob = 0.15
+        masking_target_index = np.random.choice(range(x_mask.size()[0]), int(x_mask.size()[0] * masking_target_prob))
+
+        for each_masking_index in masking_target_index:
+            x_mask[each_masking_index] = 0   
 
         #e = self.tok_embed(x) + self.pos_embed(pos) + self.seg_embed(seg)
-        e = self.tok_embed(x) + self.pos_embed(pos)
-        
+        forward_embedding = self.tok_embed(x) + self.pos_embed(pos_forward)
+        mask_embedding = x_mask
+        backward_embedding = self.tok_embed(x) + self.pos_embed(pos_backward)
+
+        e = torch.stack((forward_embedding, mask_embedding, backward_embedding), 1)
+
         return self.drop(self.norm(e))
 
 class WordCNN(nn.Module):
-    def __init__(self, vocab_size, config):
+    def __init__(self, config):
         super(WordCNN, self).__init__()
 
         #considering resnet18, hidden size is 224
-        self.vocab_size = vocab_size
-        config.vocab_size = vocab_size
         self.embedding = Dynamic_embeddings(config)
 
-        in_channels = 1
+        in_channels = 3
 
-        self.conv = nn.ModuleList([
-            nn.Conv2d(
-                in_channels=in_channels,
-                out_channels=config.n_channel_per_window,
-                kernel_size=(3, config.hidden_size)),
-
-            nn.Conv2d(
-                in_channels=in_channels,
-                out_channels=config.n_channel_per_window,
-                kernel_size=(4, config.hidden_size)),
-
-            nn.Conv2d(
-                in_channels=in_channels,
-                out_channels=config.n_channel_per_window,
-                kernel_size=(5, config.hidden_size)),
-
-            nn.Conv2d(
-                in_channels=in_channels,
-                out_channels=config.n_channel_per_window,
-                kernel_size=(6, config.hidden_size)),
-
-            nn.Conv2d(
-                in_channels=in_channels,
-                out_channels=config.n_channel_per_window,
-                kernel_size=(7, config.hidden_size))
-
-        ])
+        #generating conv layer following max_kernel_size param
+        convModuleList = []
+        for each_kernel_size in range(2, int(config.max_kernel_size)):
+            convModuleList.append(nn.Conv2d(in_channels=in_channels, out_channels=config.n_channel_per_window, kernel_size=(each_kernel_size, config.hidden_size)))
+        self.conv = nn.ModuleList(convModuleList)
 
         n_total_channels = len(self.conv) * config.n_channel_per_window
 
@@ -92,18 +81,8 @@ class WordCNN(nn.Module):
         self.fc = nn.Linear(n_total_channels, config.label_size)
 
     def forward(self, x):
-        """
-        Args:
-            x: [batch_size, max_seq_len]
-        Return:
-            logit: [batch_size, label_size]
-        """
-
-        # [batch_size, max_seq_len, hidden_size]
+        # [batch_size, 3, max_seq_len, hidden_size]
         x = self.embedding(x)
-
-        # [batch_size, 1, max_seq_len, hidden_size]
-        x = x.unsqueeze(1)
 
         # Apply Convolution filter followed by Max-pool
         out_list = []
@@ -137,4 +116,24 @@ class WordCNN(nn.Module):
         logit = self.fc(out)
 
         return logit
+
+class Word_Resnet(nn.Module):
+    def __init__(self, config):
+        super(Word_Resnet, self).__init__()
+        
+        self.embedding = Dynamic_embeddings(config)
+        
+        self.resnet_model = config.resnet_model
+        self.fc = nn.Linear(self.resnet_model.fc.out_features, config.label_size)
+
+    def forward(self, x):
+        x = self.embedding(x)
+        x = self.resnet_model(x)
+        x = self.fc(x)
+
+        return x
+
+
+
+        
 

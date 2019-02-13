@@ -10,7 +10,7 @@ def postprocess(x, train=True):
     return x
 
 def create_data_loader(train_file_path, val_file_path, batchSize=128, tokenizer=twitter_tokenizer, device=-1):
-    text_field = data.Field(tokenize=tokenizer, sequential=True, init_token='[CLS]', eos_token='[SEP]')
+    text_field = data.Field(tokenize=tokenizer, sequential=True, fix_length=224, init_token='[CLS]', eos_token='[SEP]') #fix length to 224 for Resnet training
     label_field = data.Field(sequential=False, use_vocab=False, postprocessing=data.Pipeline(postprocess))
 
     train_dataset = data.TabularDataset(train_file_path, format='tsv', fields=[('id', None), ('document', text_field), ('label', label_field)], filter_pred=lambda ex: ex.label in ['0', '1'])
