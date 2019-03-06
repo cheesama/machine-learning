@@ -1,0 +1,4 @@
+quantlib-python
+zipline
+PyQt5
+pywinauto
