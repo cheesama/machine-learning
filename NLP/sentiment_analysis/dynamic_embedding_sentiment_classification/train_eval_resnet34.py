@@ -37,11 +37,10 @@ class Sentiment_train_eval(object):
         return self.train_eval()
 
     def train_eval(self):
-        #turn on tracker
-        mlflow.start_run()
+        #turn on tracker#        mlflow.start_run()
 
         #model creation
-        self.model = self.model(config)
+        self.model = self.model(self.config)
         self.model.to(device)
         self.model = nn.DataParallel(self.model)
 
@@ -112,8 +111,8 @@ if __name__ == '__main__':
  
     #experiment param
     parser.add_argument('--epochs', type=int, default=40, help='number of epochs to train (default: 20)')
-    parser.add_argument('--lr', default=(0.005, 0.01), help='learning rate (default: 0.005)')
-    parser.add_argument('--momentum', default=(0.5, 0.9), help='SGD momentum (default: 0.5)')
+    parser.add_argument('--lr', default=0.01, help='learning rate (default: 0.005)')
+    parser.add_argument('--momentum', default=0.9, help='SGD momentum (default: 0.5)')
     parser.add_argument('--optimizer', default=SGD)
 
     #bayesian optimization setting
@@ -136,5 +135,5 @@ if __name__ == '__main__':
     loss_fn = nn.CrossEntropyLoss()
 
     trainer = Sentiment_train_eval(train_loader, val_loader, model, loss_fn, config)
-    #trainer.train_eval()
-    trainer.bayes_opt_train_eval()
+    trainer.train_eval()
+    #trainer.bayes_opt_train_eval()

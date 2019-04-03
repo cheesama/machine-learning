@@ -55,7 +55,7 @@ class Sentiment_train_eval(object):
 
         for epoch in (range(self.config.epochs)):
             self.model.train()
-            print ('train epoch: ', str(epoch))
+            #print ('train epoch: ', str(epoch))
             for idx, batch in enumerate(self.train_loader):
                 text, label = batch.document, batch.label
                 
@@ -74,7 +74,7 @@ class Sentiment_train_eval(object):
             n_correct = 0.0
 
             self.model.eval()
-            print ('eval epoch: ', str(epoch))
+            #print ('eval epoch: ', str(epoch))
             for idx, batch in enumerate(self.val_loader):
                 text, label = batch.document, batch.label
 
