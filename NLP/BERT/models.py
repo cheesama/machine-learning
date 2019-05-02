@@ -1,144 +1,134 @@
 from activation import gelu
+from utils import split_last, merge_last
 
 import math
+import json
+import numpy as np
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
 class LayerNorm(nn.Module):
-    def __init__(self, embedding_dim, variance_epsilon=1e-12):
+    "A layernorm module in the TF style (epsilon inside the square root)."
+    def __init__(self, cfg, variance_epsilon=1e-12):
         super().__init__()
-        self.gamma = nn.Parameter(torch.ones(embedding_dim))
-        self.beta = nn.Parameter(torch.zeros(embedding_dim))
+        self.gamma = nn.Parameter(torch.ones(cfg.dim))
+        self.beta  = nn.Parameter(torch.zeros(cfg.dim))
         self.variance_epsilon = variance_epsilon
 
     def forward(self, x):
-        u = x.mean(-1m keepdim=True)
+        u = x.mean(-1, keepdim=True)
         s = (x - u).pow(2).mean(-1, keepdim=True)
         x = (x - u) / torch.sqrt(s + self.variance_epsilon)
-
         return self.gamma * x + self.beta
 
-class InputEmbedding(nn.Module):
-    def __init__(self, vocab_size, max_seq_len, segments_num, embedding_dim, dropout_hidden_ratio):
+
+class Embeddings(nn.Module):
+    "The embedding module from word, position and token_type embeddings."
+    def __init__(self, cfg):
         super().__init__()
-        self.token_embedding = nn.Embedding(vocab_size, embedding_dim)
-        self.segment_embedding = nn.Embedding(segments_num, embedding_dim)
-        self.position_embedding = nn.Embedding(max_seq_len, embedding_dim)
+        self.tok_embed = nn.Embedding(cfg.vocab_size, cfg.dim) # token embedding
+        self.pos_embed = nn.Embedding(cfg.max_len, cfg.dim) # position embedding
+        self.seg_embed = nn.Embedding(cfg.n_segments, cfg.dim) # segment(token type) embedding
 
-        self.layerNorm = LayerNorm(embedding_dim)
-        self.dropout = nn.Dropout(dropout_hidden_ratio)
+        self.norm = LayerNorm(cfg)
+        self.drop = nn.Dropout(cfg.p_drop_hidden)
 
-        self.max_seq_len = max_seq_len
+    def forward(self, x, seg):
+        seq_len = x.size(1)
+        pos = torch.arange(seq_len, dtype=torch.long, device=x.device)
+        pos = pos.unsqueeze(0).expand_as(x) # (S,) -> (B, S)
 
-    def forward(self, x, segments=None):
-        positions = torch.arrange(self.max_seq_len, dtype=torch.long, device=x.device)
-        positions = positions.unsqueeze(0).expand_as(x) # (S,) -> (B, S)
-        
-        if segments is None:
-            segments = torch.zeros_like(x)
-
-        embeddings = self.token_embedding(x) + self.segment_embedding(segments) + self.position_embedding(x)
-        embeddings = self.layerNorm(embeddings)
-        embeddings = self.dropout(embeddings)
-
-        return embeddings
-
-class ScaledDotProductAttention(nn.Module):
-    def __init__(self, embedding_dim, dropout_attention_ratio, heads_num):
-        self.query_embedding = nn.Linear(embedding_dim, embedding_dim)
-        self.key_embedding = nn.Linear(embedding_dim, embedding_dim)
-        self.value_embedding = nn.Linear(embedding_dim, embedding_dim)
-
-        self.dropout = nn.Dropout(dropout_attention_ratio)
-        self.heads_num = heads_num
-        self.each_head_attention_size = embedding_dim // self.heads_num
-
-    def transpose_for_scores(self, x):
-        #split embedding to heads_num for seperate training
-        new_x_shape = x.size()[:-1] + (self.heads_num, x.size(), self.each_head_attention_size)
-        x = x.view(*new_x_shape)
-
-        # convert (batch, sentence_length, head, each_head_attention) -> (batch, head, sentence_length, each_head_attention)
-        return x.permute(0, 2, 1, 3).contiguous()
-
-    def forward(self, x, attention_mask=None):
-        query = self.query_embedding(x)
-        key = self.key_embedding(x)
-        value = self.value_embedding(x)
-
-        query_layer = self.transpose_for_scores(x)
-        key_layer = self.transpose_for_scores(x)
-        value_layer = self.transpose_for_scores(x)
-
-        #calculate attention score using query & key
-        attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
-        attention_scores = attention_scores / match.sqrt(self.each_head_attention_size)
-
-        if attention_mask is not None:
-            #convert (batch, sentence_length) -> (batch, 1, 1, sentence_length) to mapping permuted batch masking
-            attention_mask = attention_mask[:, None, None, :].float()
-            attention_scores -= 10000.0 * (1.0 - attention_mask)
-
-        #apply softmax & dropout per each head context embeddings
-        attention_probs = self.dropout(F.softmax(attention_mask, dim=-1))           
-        
-        context_layer = torch.matmul(attention_probs, value_layer)
-
-        # convert original shape for concatenation
-        # (batch, head, sentence_length, each_head_attention) -> (batch, sentence_length, head, each_head_attention)
-        context_layer = context_layer.permute(0, 2, 1, 3).contiguous()
-        context_layer = context_layer.view(*context_layer.size()[:-2], -1) # concatenate all attentions
-
-        return context_layer
+        e = self.tok_embed(x) + self.pos_embed(pos) + self.seg_embed(seg)
+        return self.drop(self.norm(e))
 
 class PositionWiseFeedForward(nn.Module):
     """ FeedForward Neural Networks for each position """
-    def __init__(self, feedFoward_dim):
+    def __init__(self, cfg):
         super().__init__()
-        self.fc1 = nn.Linear(cfg.dim, feedForward_dim)
-        self.fc2 = nn.Linear(feedForward_dim, cfg.dim)
+        self.fc1 = nn.Linear(cfg.dim, cfg.dim_ff)
+        self.fc2 = nn.Linear(cfg.dim_ff, cfg.dim)
+        #self.activ = lambda x: activ_fn(cfg.activ_fn, x)
 
     def forward(self, x):
-        # (Batch, Sentence_length, embedding) -> (Batch, Sentence_length, feedForward_embedding) -> (Batch, Sentenec_length, embedding)
+        # (B, S, D) -> (B, S, D_ff) -> (B, S, D)
         return self.fc2(gelu(self.fc1(x)))
 
-class EncoderBlock(nn.Module):
-    def __init__(self, embedding_dim, dropout_attention_ratio, heads_num, feedForward_dim, dropout_hidden_ratio):
-        super().__init__()
-        self.attention = ScaledDotProductAttention(embedding_dim, dropout_attention_ratio, heads_num)
-        self.projection = nn.Linear(embedding_dim, embedding_dim)
-        self.norm1 = LayerNorm(embedding_dim)
 
-        self.posistionWiseFeedForward = PositionWiseFeedForward(feedForward_dim)
-        self.norm2 = LayerNorm(embedding_dim)
-        self.dropout = nn.Dropout(dropout_hidden_ratio)
+class Block(nn.Module):
+    """ Transformer Block """
+    def __init__(self, cfg):
+        super().__init__()
+        self.attn = nn.MultiHeadAttention(cfg.dim, cfg.n_heads) #pytorch 1.1 support
+        self.proj = nn.Linear(cfg.dim, cfg.dim)
+        self.norm1 = LayerNorm(cfg)
+        self.pwff = PositionWiseFeedForward(cfg)
+        self.norm2 = LayerNorm(cfg)
+        self.drop = nn.Dropout(cfg.p_drop_hidden)
 
     def forward(self, x, mask):
-        attention = self.attention(x, mask)
-        attention = self.norm1(x + self.dropout(self.projection(attention))) #residual connection
-        attention = self.norm2(attention + self.dropout(self.positionWiseFeedForward(attention))) #residual connection
+        h = self.attn(x, mask)
+        h = self.norm1(x + self.drop(self.proj(h)))
+        h = self.norm2(h + self.drop(self.pwff(h)))
+        return h
 
-        return attention
-
-class BERTEncoder(nn.Module):
-    def __init__(self, vocab_size, max_seq_len, segments_num, embedding_dim, dropout_hidden_ratio, 
-                blocks_num, dropout_attention_ratio, heads_num, feedForward_dim):
+class Transformer(nn.Module):
+    """ Transformer with Self-Attentive Blocks"""
+    def __init__(self, cfg):
         super().__init__()
-        self.embeddings = InputEmbedding(vocab_size, max_seq_len, segments_num, embedding_dim, dropout_hidden_ratio)
-        self.encoderBlocks = nn.ModuleList([EncoderBlock(embedding_dim, dropout_attention_ratio, heads_num, feedForward_dim, dropout_hidden_ratio)
-                                            for _ in range(blocks_num)])
+        self.embed = Embeddings(cfg)
+        self.blocks = nn.ModuleList([Block(cfg) for _ in range(cfg.n_layers)])
 
-    def forward(self, x, segment, mask):
-        attention = self.embeddings(x, segments)
-        for block in self.encoderBlocks:
-            attention = block(attention, mask)
+    def forward(self, x, seg, mask):
+        h = self.embed(x, seg)
+        for block in self.blocks:
+            h = block(h, mask)
+        return h
 
-        return attention
+class BertModel4Pretrain(nn.Module):
+    "Bert Model for Pretrain : Masked LM and next sentence classification"
+    def __init__(self, cfg):
+        super().__init__()
+        self.transformer = models.Transformer(cfg)
+        self.fc = nn.Linear(cfg.dim, cfg.dim)
+        self.activ1 = nn.Tanh()
+        self.linear = nn.Linear(cfg.dim, cfg.dim)
+        self.activ2 = models.gelu
+        self.norm = models.LayerNorm(cfg)
+        self.classifier = nn.Linear(cfg.dim, 2)
+        
+        # decoder is shared with embedding layer
+        embed_weight = self.transformer.embed.tok_embed.weight
+        n_vocab, n_dim = embed_weight.size()
+        self.decoder = nn.Linear(n_dim, n_vocab, bias=False)
+        self.decoder.weight = embed_weight
+        self.decoder_bias = nn.Parameter(torch.zeros(n_vocab))
 
+    def forward(self, input_ids, segment_ids, input_mask, masked_pos):
+        h = self.transformer(input_ids, segment_ids, input_mask)
+        pooled_h = self.activ1(self.fc(h[:, 0]))
+        masked_pos = masked_pos[:, :, None].expand(-1, -1, h.size(-1))
+        h_masked = torch.gather(h, 1, masked_pos)
+        h_masked = self.norm(self.activ2(self.linear(h_masked)))
+        logits_lm = self.decoder(h_masked) + self.decoder_bias
+        logits_clsf = self.classifier(pooled_h)
 
+        return logits_lm, logits_clsf
 
+class BertClassifier(nn.Module):
+    """ Classifier with Transformer """
+    def __init__(self, cfg, n_labels):
+        super().__init__()
+        self.transformer = Transformer(cfg)
+        self.fc = nn.Linear(cfg.dim, cfg.dim)
+        self.activ = nn.Tanh()
+        self.drop = nn.Dropout(cfg.p_drop_hidden)
+        self.classifier = nn.Linear(cfg.dim, n_labels)
 
-
-
-
+    def forward(self, input_ids, segment_ids, input_mask):
+        h = self.transformer(input_ids, segment_ids, input_mask)
+        # only use the first h in the sequence
+        pooled_h = self.activ(self.fc(h[:, 0]))
+        logits = self.classifier(self.drop(pooled_h))
+        return logits
