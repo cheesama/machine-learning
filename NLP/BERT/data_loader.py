@@ -13,7 +13,6 @@ def seek_random_offset(inputFile, back_margin=2000):
     inputFile.seek(randint(0, max_offset), 0)
     inputfile.readline() # throw away an incomplete sentence
 
-
 class SentencePairLoader():
     """ Load sentence pair (sequential or random order) from corpus """
     def __init__(self, inputFile, batch_size, tokenize, max_len, short_sampling_prob=0.1, pipeline=[]):
